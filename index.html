@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="initial-scale=1,user-scalable=no,maximum-scale=1,width=device-width">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+
+    <title>WebGIS</title>
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        html, body, #map {
+            height: 100%;
+            width: 100%;
+            margin: 0;
+        }
+
+        /* Judul peta overlay */
+        .map-title {
+            position: absolute;
+            top: 14px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 12px 18px;
+            background: linear-gradient(135deg, rgba(20,20,20,0.92), rgba(50,50,50,0.9));
+            color: #ffd166;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+            font-size: 18px;
+            font-weight: 800;
+            letter-spacing: 0.4px;
+            text-transform: uppercase;
+            border: 1px solid rgba(255,255,255,0.12);
+            z-index: 1200;
+            text-align: center;
+        }
+
+        /* Skala peta (Leaflet scale control) */
+        .leaflet-control-scale {
+            background: linear-gradient(135deg, rgba(20,20,20,0.92), rgba(50,50,50,0.9));
+            color: #ffd166;
+            padding: 6px 10px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.25);
+            border: 1px solid rgba(255,255,255,0.12);
+            position: relative;
+        }
+
+        .leaflet-control-scale::before {
+            content: "Skala";
+            display: block;
+            font-weight: 700;
+            font-size: 12px;
+            margin-bottom: 4px;
+            color: #ffd166;
+            letter-spacing: 0.2px;
+            text-align: left;
+        }
+
+        .leaflet-control-scale-line {
+            border: none;
+            border-top: 2px solid #ffd166;
+            color: #ffd166;
+            padding: 2px 0 0 0;
+            margin-top: 4px;
+            background: transparent;
+        }
+
+        .leaflet-control-scale-line:not(:first-child) {
+            border-top-color: #ffa534;
+            color: #ffa534;
+        }
+
+        /* Arah mata angin dengan ikon PNG eksternal */
+        .compass {
+            width: 96px;
+            height: 96px;
+            background: url('https://png.pngtree.com/png-clipart/20220720/original/pngtree-arah-kompas-atau-mata-angin-untuk-undangan-png-image_8390952.png') center/contain no-repeat;
+            filter: drop-shadow(0 3px 10px rgba(0, 0, 0, 0.3));
+            clip-path: circle(50%);
+            mix-blend-mode: multiply;
+            pointer-events: none;
+        }
+
+        /* Legenda */
+        .legend-box {
+            background: linear-gradient(135deg, rgba(20,20,20,0.92), rgba(50,50,50,0.9));
+            color: #ffd166;
+            padding: 16px 18px;
+            border-radius: 14px;
+            box-shadow: 0 5px 14px rgba(0,0,0,0.28);
+            border: 1px solid rgba(255,255,255,0.12);
+            font-size: 13px;
+            min-width: 210px;
+        }
+
+        .legend-title {
+            font-weight: 800;
+            letter-spacing: 0.3px;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            color: #ffd166;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 6px;
+            color: #f5f5f5;
+        }
+
+        .legend-swatch {
+            width: 16px;
+            height: 16px;
+            border: 1px solid rgba(255,255,255,0.45);
+            margin-right: 10px;
+            border-radius: 3px;
+            flex-shrink: 0;
+        }
+
+        .legend-marker {
+            width: 18px;
+            height: 18px;
+            margin-right: 10px;
+            background: url('assets/apotek.png') center/contain no-repeat;
+            flex-shrink: 0;
+        }
+
+        /* Deskripsi singkat peta */
+        .map-description {
+            position: absolute;
+            top: 70px;
+            left: 50%;
+            transform: translateX(-50%);
+            max-width: 420px;
+            background: linear-gradient(135deg, rgba(20,20,20,0.92), rgba(50,50,50,0.9));
+            color: #f5f5f5;
+            padding: 18px 20px;
+            border-radius: 14px;
+            box-shadow: 0 6px 16px rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.12);
+            font-size: 14px;
+            line-height: 1.55;
+            z-index: 1150;
+        }
+    </style>
+</head>
+
+<body>
+<div class="map-title">Persebaran Apotek di Kota Yogyakarta</div>
+<div class="map-description">Peta menampilkan 25 titik apotek di Kota Yogyakarta dan sekitarnya, lengkap dengan batas administrasi kabupaten/kota.</div>
+<div id="map"></div>
+
+<script>
+/* =====================
+   Initial Map
+===================== */
+var map = L.map('map').setView([-7.9, 110.45], 10);
+
+// Skala peta
+L.control.scale({ position: 'bottomright', imperial: false, maxWidth: 140 }).addTo(map);
+
+// Arah mata angin (pojok kiri atas)
+var northArrow = L.control({ position: 'topleft' });
+northArrow.onAdd = function () {
+    return L.DomUtil.create('div', 'compass');
+};
+northArrow.addTo(map);
+
+// Legenda
+var legend = L.control({ position: 'bottomleft' });
+legend.onAdd = function () {
+    var div = L.DomUtil.create('div', 'legend-box');
+    div.style.marginBottom = '70px';
+    div.innerHTML = '<div class="legend-title">Legenda</div>' +
+        '<div class="legend-item"><span class="legend-marker"></span>Apotek</div>' +
+        '<div class="legend-item"><span class="legend-swatch" style="background:#e53935"></span>Kota Yogyakarta</div>' +
+        '<div class="legend-item"><span class="legend-swatch" style="background:#1e88e5"></span>Sleman</div>' +
+        '<div class="legend-item"><span class="legend-swatch" style="background:#43a047"></span>Bantul</div>' +
+        '<div class="legend-item"><span class="legend-swatch" style="background:#fdd835"></span>Kulon Progo</div>' +
+        '<div class="legend-item"><span class="legend-swatch" style="background:#7b1fa2"></span>Gunungkidul</div>';
+    return div;
+};
+legend.addTo(map);
+
+/* =====================
+   Basemap Layers
+===================== */
+
+// OpenStreetMap
+var basemap0 = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: 'AHMAD FAIZ MUZAKI_24611023'
+});
+
+// OpenStreetMap HOT
+var OpenStreetMap_HOT = L.tileLayer(
+    'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: 'AHMAD FAIZ MUZAKI_24611023'
+});
+
+// Esri World Imagery (FIXED)
+var Esri_WorldImagery = L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'AHMAD FAIZ MUZAKI_24611023'
+});
+
+// OpenTopoMap
+var OpenTopoMap = L.tileLayer(
+    'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+    maxZoom: 17,
+    attribution: 'AHMAD FAIZ MUZAKI_24611023'
+});
+
+/* =====================
+   Default Basemap
+===================== */
+basemap0.addTo(map);
+
+/* =====================
+   Layer Control
+===================== */
+var baseMaps = {
+    'Open Street Map': basemap0,
+    'Open Street Map HOT': OpenStreetMap_HOT,
+    'Open Topo Map': OpenTopoMap,
+    'Esri World Imagery': Esri_WorldImagery
+};
+
+L.control.layers(baseMaps, null, { collapsed: false }).addTo(map);
+
+// List of Locations: array of objects//
+var locations = [
+    {
+        name: "Apotek K-24 Gondomanan",
+        address: "Jl. Brigjen Katamso No.117, Prawirodirjan, Gondomanan, Kota Yogyakarta, DI Yogyakarta, Indonesia",
+        lat: -7.7975,
+        lng: 110.3642
+    },
+    {
+        name: "Apotek Kimia Farma 21",
+        address: "Jl. Malioboro No.123, Sosromenduran, Gedong Tengen, Kota Yogyakarta, DI Yogyakarta, Indonesia",
+        lat: -7.7968,
+        lng: 110.3668
+    },
+    {
+        name: "Apotek Garsen",
+        address: "Jl. Letjen S. Parman No.13, Gedongkiwo, Mantrijeron, Kota Yogyakarta, DI Yogyakarta, Indonesia",
+        lat: -7.7954,
+        lng: 110.3732
+    },
+    {
+        name: "Apotek K-24 Jl. Magelang Yogyakarta",
+        address: "Jalan Magelang No.160-162, Kricak, Tegalrejo, Kota Yogyakarta, DI Yogyakarta, Indonesia",
+        lat: -7.7849,
+        lng: 110.3647
+    },
+    {
+        name: "Apotek K-24 Sinduadi Sleman",
+        address: "Jl. Magelang No.KM.5,5, Sinduadi, Mlati, Sleman, DI Yogyakarta, Indonesia",
+        lat: -7.7817,
+        lng: 110.3713
+    },
+    {
+        name: "Apotek K-24 Demangan Baru Yogyakarta",
+        address: "Jl. Demangan Baru, Caturtunggal, Depok, Sleman, DI Yogyakarta, Indonesia",
+        lat: -7.7761,
+        lng: 110.4054
+    },
+    {
+        name: "Apotek K-24 Hos Cokroaminoto Yogyakarta",
+        address: "Jl. HOS Cokroaminoto No.51, Pakuncen, Wirobrajan, Kota Yogyakarta, DI Yogyakarta, Indonesia",
+        lat: -7.7975,
+        lng: 110.3656
+    },
+    {
+        name: "Apotek K24 Timoho",
+        address: "Jl. Timoho No.315, Baciro, Gondokusuman, Yogyakarta City, DI Yogyakarta, Indonesia",
+        lat: -7.7924,
+        lng: 110.3651
+    },
+    {
+        name: "Apotek K-24 Ambarukmo Sleman",
+        address: "Jl. Laksda Adisucipto No.150 A, Papringan, Caturtunggal, Depok, Sleman, DI Yogyakarta, Indonesia",
+        lat: -7.7748,
+        lng: 110.4105
+    },
+    {
+        name: "Apotek K-24 Gajah Mada Yogyakarta",
+        address: "Jl. Gajah Mada No.7C, Purwokinanti, Pakualaman, Kota Yogyakarta, DI Yogyakarta, Indonesia",
+        lat: -7.7958,
+        lng: 110.3679
+    },
+    {
+        name: "Apotek K-24 Krapyak Yogyakarta",
+        address: "Jl. DI Panjaitan No.49, Mantrijeron, Kota Yogyakarta, DI Yogyakarta, Indonesia",
+        lat: -7.7935,
+        lng: 110.3791
+    },
+    {
+        name: "Apotek K-24 Bhayangkara Yogyakarta",
+        address: "Jl. Bhayangkara No.30A, Ngupasan, Gondomanan, Yogyakarta City, DI Yogyakarta, Indonesia",
+        lat: -7.7982,
+        lng: 110.3667
+    },
+    {
+        name: "Apotek Waringin",
+        address: "Jl. Doktor Sutomo No.2, Baciro, Gondokusuman, Kota Yogyakarta, DI Yogyakarta, Indonesia",
+        lat: -7.7964,
+        lng: 110.3691
+    },
+    {
+        name: "Apotek Aditya Farma",
+        address: "Jl. Suryodiningratan No.60, Mantrijeron, Kota Yogyakarta, DI Yogyakarta, Indonesia",
+        lat: -7.7981,
+        lng: 110.3698
+    },
+    {
+        name: "Apotek UMY",
+        address: "Jl. Kapten Piere Tendean No.56, Wirobrajan, Kota Yogyakarta, DI Yogyakarta, Indonesia",
+        lat: -7.8002,
+        lng: 110.355
+    },
+    {
+        name: "Apotek Pharm 24 Jalan Parangtritis",
+        address: "Jl. Parangtritis No.112 A, Mantrijeron, Kota Yogyakarta, DI Yogyakarta, Indonesia",
+        lat: -7.7949,
+        lng: 110.3758
+    },
+    {
+        name: "Apotek Pharm 24 Bhayangkara",
+        address: "Jl. Bhayangkara No.34, Ngupasan, Gondomanan, Kota Yogyakarta, DI Yogyakarta, Indonesia",
+        lat: -7.7985,
+        lng: 110.367
+    },
+    {
+        name: "Pharm 24",
+        address: "Jl. R. E. Martadinata No.63, Wirobrajan, Yogyakarta City, DI Yogyakarta, Indonesia",
+        lat: -7.8016,
+        lng: 110.3575
+    },
+    {
+        name: "Apotek Pharm 24 Kusumanegara",
+        address: "Jl. Kusumanegara No.104, Umbulharjo, Kota Yogyakarta, DI Yogyakarta, Indonesia",
+        lat: -7.803,
+        lng: 110.3684
+    },
+    {
+        name: "Apotek Pharm24",
+        address: "Jl. Affandi 28 Soropadan, Condong Catur, Depok, Sleman, DI Yogyakarta, Indonesia",
+        lat: -7.7902,
+        lng: 110.4235
+    },
+    {
+        name: "APOTEK PHARM 24 GODEAN",
+        address: "Jl. Godean No.KM. 4,5, Banyuraden, Gamping, Sleman, DI Yogyakarta, Indonesia",
+        lat: -7.767,
+        lng: 110.3665
+    },
+    {
+        name: "K24 Wirosaban Pharm",
+        address: "Jl. Sorogenen No.240, Nitikan Baru, Sorosutan, Umbulharjo, Kota Yogyakarta, DI Yogyakarta, Indonesia",
+        lat: -7.8042,
+        lng: 110.3648
+    },
+    {
+        name: "K24 Pharm Jakal",
+        address: "No.KM. 5/94, Kaliurang St, Caturtunggal, Depok, Sleman, DI Yogyakarta, Indonesia",
+        lat: -7.7813,
+        lng: 110.4139
+    },
+    {
+        name: "K-24 Pharm Anggajaya",
+        address: "Jl. Anggajaya 1 No.188, Gejayan, Condong Catur, Sleman, DI Yogyakarta, Indonesia",
+        lat: -7.7757,
+        lng: 110.4295
+    },
+    {
+        name: "Apotek Srikandi",
+        address: "Ruko Permata Blok R, Jl. Babarsari No.3A, Caturtunggal, Sleman, DI Yogyakarta, Indonesia",
+        lat: -7.7753,
+        lng: 110.4096
+    }
+];
+
+// custom marker
+var customIcon1 = L.icon({
+  iconUrl: 'assets/apotek.png',
+  iconSize: [60, 60]
+});
+
+
+// Loop for marker 
+locations.forEach(function(loc) { 
+var marker = L.marker([loc.lat, loc.lng], { icon: customIcon1 });
+	var popupContent = "<b>" + loc.name + "</b>";
+	if (loc.address) {
+		popupContent += "<br>" + loc.address;
+	}
+	marker.bindPopup(popupContent);
+	marker.addTo(map);
+});
+
+fetch('assets/jogja-wilayah.geojson') // file name
+.then(res => res.json()) 
+.then(geojsonData => { 
+L.geoJSON(geojsonData, { 
+style: { 
+color: "#5d4037", 
+weight: 1.5, 
+fillColor: "#efebe9", 
+fillOpacity: 0.1 
+} 
+}).addTo(map); 
+}) 
+.catch(err => console.warn("Gagal muat batas wilayah:", err));
+
+// === FUNGSI WARNA ===
+    function getColor(kab) {
+      return kab === 'Kota Yogyakarta' ? '#e53935' :
+        kab === 'Sleman' ? '#1e88e5' :
+          kab === 'Bantul' ? '#43a047' :
+            kab === 'Kulon Progo' ? '#fdd835' :
+              kab === 'Gunungkidul' ? '#7b1fa2' :
+                '#9e9e9e';
+    }
+    // === MUAT GEOJSON ===
+    fetch('assets/jogja-wilayah.geojson')
+      .then(res => res.json())
+      .then(data => {
+        L.geoJSON(data, {
+          style: function (feature) {
+            return {
+              fillColor: getColor(feature.properties.kab_kota), // ← SESUAIKAN!
+              color: '#000',
+              weight: 1,
+              fillOpacity: 0.2
+            };
+          },
+          onEachFeature: function (feature, layer) {
+            if (feature.properties.kab_kota) {
+              layer.bindPopup("<b>" + feature.properties.kab_kota + "</b>");
+            }
+          }
+        }).addTo(map);
+      });
+
+</script>
+</body>
+</html>
